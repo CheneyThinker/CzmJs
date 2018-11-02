@@ -1,0 +1,282 @@
+(function($, undefined) {
+	//验证器持有者映射
+	var validator = {
+		notNull: isNotNull,
+		phone: checkPhone,
+		email: checkEmail,
+		idCard: checkIdCard,
+		notNegative: checkNotNegative,
+		prompt: showPrompt
+	};
+	
+	/*验证器持有者映射实现-start*/
+	//校验是否非空
+	function isNotNull(v) {
+		return v !== '';
+	}
+	//校验是否为正确的手机号
+	function checkPhone(v) {
+		return /^(((13[0-9]{1})|(15[0-9]{1})|(17[0-9]{1})|(18[0-9]{1})|(19[0-9]{1})|(147))+\d{8})$/.test(v);
+	}
+	//校验是否为正确的邮箱
+	function checkEmail(v) {
+		return /^([a-zA-Z0-9_-])+@([a-zA-Z0-9_-])+(.[a-zA-Z0-9_-])+/.test(v);
+	}
+	//检验是否为正确的身份证号
+	function checkIdCard(v) {
+		return /(^\d{15}$)|(^\d{18}$)|(^\d{17}(\d|X|x)$)/.test(v);
+	}
+	//检验是否为正确的非负数\浮点数
+	function checkNotNegative(val) {
+		return /^\d+(\.\d+)?$/.test(val);
+	}
+	//提示框展示错误信息
+	function showPrompt(msg, duration) {
+		var m = document.createElement('div');
+		m.innerHTML = msg;
+		m.style.cssText = "width:60%; background:#000; opacity:0.8; color:#fff; line-height:22px; text-align:center; border-radius:5px; position:fixed; top:50%; left:50%; transform: translate(-50%, -50%); z-index:999999; font-size:14px; padding:2%; text-shadow:none;";
+		document.body.appendChild(m);
+		setTimeout(function() {
+			var d = 0.5;
+			m.style.webkitTransition = '-webkit-transform ' + d + 's ease-in, opacity ' + d + 's ease-in';
+			m.style.opacity = '0';
+			setTimeout(function() {
+				document.body.removeChild(m);
+			}, d * 1000);
+		}, duration || 3000);
+	}
+	/*验证器持有者映射实现-end*/
+	
+	//数据提交插件
+	$.fn.extend({
+		cacheHolder: function(key) {
+			var results = [];
+			var items = $.merge($(this).find('input') || [], $(this).find('textarea') || []);
+			$.each(items, function(i, item) {
+				var that = $(item);
+				var obj = { value: that.val(), id: that.attr('id') };
+				var map = that.attr('map');
+				if (map !== undefined) {
+					obj.map = map;
+				}
+				results.push(obj);
+			});
+			localStorage.setItem(key, JSON.stringify(results));
+		},
+		validate: function() {
+			var that = $(this);
+			var map = that.attr('map');
+			var ismap = map !== undefined;
+			var value = $.trim(ismap ? map : that.val());
+			var selectable = that.attr('selectable') || 'no';
+			if (selectable === 'no') {
+				if (ismap || that.attr('type') !== 'hidden') {
+					var required = that.attr('required') || 'true';
+					if (required === 'true') {
+						var prompt = that.attr('prompt');
+						var promptTime = that.attr('promptTime') || '3000';
+						var validate = that.attr('validate');
+						var validates = [ 'notNull' ];
+						var promptes = [ '' ];
+						if (prompt !== undefined && validate !== undefined) {
+							if (validate.indexOf('-') != -1) {
+								$.merge(validates, validate.split('-'));
+								$.merge(promptes, prompt.split('-'));
+							}
+							else {
+								validates.push(validate);
+								promptes.push(prompt);
+							}
+						}
+						var tipHead = ismap ? '请选择' : '请输入';
+						var head = that.attr('name').split('-')[1];
+						for (var i in validates) {
+							if (!validator[validates[i]](value)) {
+								validator.prompt(tipHead + promptes[i] + head + '!', promptTime);
+								return false;
+							}
+						}
+					}
+				}
+			}
+			return value;
+		},
+		installData: function() {
+			var data = new Object();
+			var items = $.merge($(this).find('input') || [], $(this).find('textarea') || []);
+			for (var i = 0, j = items.length; i < j; i++) {
+				var submit = $(items[i]).attr('submit') || 'yes';
+				if (submit === 'yes') {
+					var itemValue = $(items[i]).validate();
+					if (!$.isValue(itemValue)) {
+						for (var key in data) {
+							delete data[key];
+						}
+						return false;
+					}
+					data[$(items[i]).attr('name').split('-')[0]] = itemValue;
+				}
+			}
+			/*
+			for (var i = 0, j = items.length; i < j; i++) {
+				if ($(items[i]).attr('map') !== undefined) {
+					$(items[i]).attr('map', '');
+				} else {
+					if ($(items[i]).attr('type') !== 'hidden') {
+						$(items[i]).val('');
+					}
+				}
+			}
+			*/
+			return data;
+		},
+		submitRequest: function(options, prevObj) {
+			if (!(options.hasOwnProperty('success') || options.hasOwnProperty('error') || options.hasOwnProperty('duration') || options.hasOwnProperty('expand'))) {
+				prevObj = options;
+				options = {};
+			}
+			var data = this.installData();
+			if ($.isValue(data)) {
+				if (prevObj !== undefined) {
+					for (var key in prevObj) {
+						if (!(key in data)) {
+							data[key] = prevObj[key];
+						}
+					}
+				}
+				options.data = data;
+				$.submitRequest(options);
+			}
+		}
+	});
+	$.extend({
+		showPrompt: function(msg, duration) {
+			showPrompt(msg, duration);
+		},
+		filterIn: function(obj, items, deep) {
+			var result = {};
+			var temp = [];
+			if (items.indexOf(' ') != -1) {
+				temp = items.split(' ');
+			} else {
+				temp.push(items);
+			}
+			$.each(temp, function(i, item) {
+				if (obj.hasOwnProperty(item)) {
+					result[item] = obj[item];
+				}
+			});
+			if (deep === undefined || deep === false) {
+				for (var key in obj) {
+					delete obj[key];
+				}
+			}
+			return result;
+		},
+		filterOut: function(obj, items, deep) {
+			var temp = [];
+			if (items.indexOf(' ') != -1) {
+				temp = items.split(' ');
+			} else {
+				temp.push(items);
+			}
+			if (deep && deep === true) {
+				var newObj = $.deepClone(obj);
+				$.each(temp, function(i, item) {
+					delete newObj[item];
+				});
+				return newObj;
+			} else {
+				$.each(temp, function(i, item) {
+					delete obj[item];
+				});
+				return obj;
+			}
+		},
+		deepClone: function(obj) {
+			var objClone = Array.isArray(obj) ? [] : {};
+			if (obj && typeof obj === 'object') {
+				for (key in obj) {
+					if (obj.hasOwnProperty(key)) {
+						if (obj[key] && typeof obj[key] === 'object') {
+							objClone[key] = this.deepClone(obj[key]);
+						} else {
+							objClone[key] = obj[key];
+						}
+					}
+				}
+			}
+			return objClone;
+		},
+		isValue: function(v) {
+			return v !== undefined && v !== null && (typeof v) !== 'boolean';
+		},
+		fillDataByHolder: function(key, options) {
+			var holder = localStorage.getItem(key);
+			if (holder === null) {
+				options.noHolder();
+			} else {
+				localStorage.removeItem(key);
+				holder = JSON.parse(holder);
+				if (options.hasOwnProperty('special')) {
+					options.special(holder);
+				}
+				$.each(holder, function(i, item) {
+					var that = $('#' + item.id);
+					that.val(item.value);
+					if (item.map !== undefined) {
+						that.attr('map', item.map);
+					}
+				});
+			}
+			options.common();
+		},
+		fillData: function(obj) {
+			for (var key in obj) {
+				$('#' + key).val(obj[key]);
+			}
+			return obj;
+		},
+		submitRequest: function(options) {
+			options = options || {};
+			var submitType = options.submitType || 'json';
+			var config = {
+				url : options.url || globalConfig[globalEnvironment].backStage,
+				type : options.type || 'post',
+				data : submitType === 'json' ? { data: JSON.stringify(options.data) } : options.data,
+				dataType : options.dataType || 'json',
+			};
+			var submit = globalConfig[globalEnvironment].submit || 'yes';
+			if (submit === 'yes') {
+				$.ajax(config).then(function(res) {
+					if (options.hasOwnProperty('success') || options.hasOwnProperty('error') || options.hasOwnProperty('duration') || options.hasOwnProperty('expand')) {
+						if (res.code == 200) {
+							if (options.hasOwnProperty('success')) {
+								options.success(res.data);
+							}
+						}
+						else if (res.code == 404) {
+							if (options.hasOwnProperty('duration')) {
+								validator.prompt(res.msg, options.duration);
+							}
+							else if (options.hasOwnProperty('error')) {
+								options.error(res.msg, res.data);
+							}
+						}
+						else {
+							if (options.hasOwnProperty('expand')) {
+								options.expand(res);
+							}
+						}
+					}
+					else {
+						localStorage.setItem('success', JSON.stringify(res));
+						window.location.href = 'success.html';
+					}
+				});
+			} else {
+				console.log(config);
+			}
+		}
+	});
+})(jQuery);
